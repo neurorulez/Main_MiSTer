@@ -35,6 +35,15 @@
 
 #include "support.h"
 
+uint64_t joyraw_count = 0;
+uint64_t last_joyraw = 0x0;
+uint8_t joyraw_button1 =0;
+uint8_t joyraw_button2 =0;
+uint8_t joyraw_up = 0;
+uint8_t joyraw_down = 0;
+uint8_t joyraw_left = 0;
+uint8_t joyraw_right = 0;  
+
 static char core_path[1024];
 
 static uint8_t vol_att = 0;
@@ -1575,6 +1584,67 @@ int user_io_use_cheats()
 	return use_cheats;
 }
 
+uint16_t user_io_joyraw_check_change();
+{
+	uint16_t joyraw;
+	spi_uio_cmd_cont(UIO_USERIO_GET);
+	joyraw = spi_w(0);
+	DisableIO();
+	
+	if (joyraw_count == 3000) {
+		joyraw_count = 0;
+		
+		if ( (joyraw >> 5) & 0x1 & !joyraw_button2) {  
+			user_io_kbd(KEY_ESC, 1);
+			joyraw_button2 =1;
+		} else if (joyraw_button2==1){
+			user_io_kbd(KEY_ESC, 0);
+			joyraw_button2=0;
+		}
+		
+		if ( (joyraw >> 4) & 0x1 & !joyraw_button1) {  
+			user_io_kbd(KEY_ENTER, 1);
+			joyraw_button1 =1;
+		} else if (joyraw_button1==1){
+			user_io_kbd(KEY_ENTER, 0);
+			joyraw_button1=0;
+		}
+		
+		if ( (joyraw >> 3) & 0x1 & !joyraw_up) {  
+			user_io_kbd(KEY_UP, 1);
+			joyraw_up = 1 ;
+		} else if (joyraw_up==1){
+			user_io_kbd(KEY_UP, 0);
+			joyraw_up = 0;
+		}
+
+		if ( (joyraw >> 2) & 0x1 & !joyraw_down) {  
+			user_io_kbd(KEY_DOWN, 1);
+			joyraw_down =1;
+		} else if (joyraw_down==1){
+			user_io_kbd(KEY_DOWN, 0);
+			joyraw_down = 0;
+		}
+	
+		if ( (joyraw >> 1) & 0x1& 0x1 & !joyraw_left) { 
+			user_io_kbd(KEY_LEFT, 1);
+			joyraw_left = 1 ;
+		} else if (joyraw_left==1){
+			user_io_kbd(KEY_LEFT, 0);
+			joyraw_left = 0 ;
+		}
+		if ( joyraw  & 0x1 & !joyraw_right) { 
+			user_io_kbd(KEY_RIGHT, 1);
+			joyraw_right = 1 ;
+		} else if (joyraw_right==1){
+			user_io_kbd(KEY_RIGHT, 0);
+			joyraw_right = 0 ;
+		}
+	}
+	joyraw_count ++;
+	return joyraw;
+}  
+
 static void check_status_change()
 {
 	static u_int8_t last_status_change = 0;
@@ -2133,7 +2203,8 @@ void user_io_poll()
 	}
 
 	user_io_send_buttons(0);
-
+	user_io_joyraw_check_change();
+	
 	if (is_minimig())
 	{
 		//HDD & FDD query
