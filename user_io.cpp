@@ -1587,7 +1587,7 @@ int user_io_use_cheats()
 uint16_t user_io_joyraw_check_change();
 {
 	uint16_t joyraw;
-	spi_uio_cmd_cont(UIO_USERIO_GET);
+	spi_uio_cmd_cont(UIO_USERIO_GET | UIO_USERIO_OLD);
 	joyraw = spi_w(0);
 	DisableIO();
 	

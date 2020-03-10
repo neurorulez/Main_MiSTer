@@ -34,6 +34,8 @@
 #define UIO_ETH_FRM_OUT 0x0c
 #define UIO_SERIAL_STAT 0x0d
 
+#define UIO_USERIO_GET  0x0f
+
 #define UIO_JOYSTICK2   0x10  // also used by minimig and 8 bit
 #define UIO_JOYSTICK3   0x11  // -"-
 #define UIO_JOYSTICK4   0x12  // -"-
@@ -75,7 +77,7 @@
 #define UIO_CD_GET      0x34
 #define UIO_CD_SET      0x35
 #define UIO_INFO_GET    0x36
-#define UIO_USERIO_GET  0x37
+#define UIO_USERIO_OLD  0x37
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
