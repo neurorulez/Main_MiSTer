@@ -503,7 +503,7 @@ int FileSeek(fileTYPE *file, __off64_t offset, int origin)
 			file->zip->offset = 0;
 		}
 
-		char buf[512];
+		static char buf[4*1024];
 		while (file->zip->offset < offset)
 		{
 			const size_t want_len = MIN((__off64_t)sizeof(buf), offset - file->zip->offset);
@@ -638,7 +638,8 @@ int FileDelete(const char *name)
 	if (name[0] != '/') sprintf(full_path, "%s/%s", getRootDir(), name);
 	else strcpy(full_path, name);
 
-	return !unlink(name);
+	printf("delete %s\n", full_path);
+	return !unlink(full_path);
 }
 
 int FileLoad(const char *name, void *pBuffer, int size)
@@ -662,7 +663,17 @@ int FileLoadConfig(const char *name, void *pBuffer, int size)
 
 int FileSaveConfig(const char *name, void *pBuffer, int size)
 {
-	char path[256] = { CONFIG_DIR"/" };
+	char path[256] = { CONFIG_DIR };
+	const char *p;
+	while ((p = strchr(name, '/')))
+	{
+		strcat(path, "/");
+		strncat(path, name, p - name);
+		name = ++p;
+		FileCreatePath(path);
+	}
+
+	strcat(path, "/");
 	strcat(path, name);
 	return FileSave(path, pBuffer, size);
 }
@@ -991,7 +1002,7 @@ void FindStorage(void)
 	{
 		int saveddev = device;
 		device = 0;
-		MiSTer_ini_parse();
+		cfg_parse();
 		device = saveddev;
 		video_mode_load();
 		user_io_send_buttons(1);
@@ -1064,27 +1075,26 @@ struct DirentComp
 		if ((de1.de.d_type == DT_DIR) && !strcmp(de1.altname, "..")) return true;
 		if ((de2.de.d_type == DT_DIR) && !strcmp(de2.altname, "..")) return false;
 
-		if ((de1.de.d_type == DT_DIR) && (de2.de.d_type == DT_REG)) return true;
-		if ((de1.de.d_type == DT_REG) && (de2.de.d_type == DT_DIR)) return false;
+		if ((de1.de.d_type == DT_DIR) && (de2.de.d_type != DT_DIR)) return true;
+		if ((de1.de.d_type != DT_DIR) && (de2.de.d_type == DT_DIR)) return false;
 
-		if (de1.de.d_type == de2.de.d_type)
+		int len1 = strlen(de1.altname);
+		int len2 = strlen(de2.altname);
+		if ((len1 > 4) && (de1.altname[len1 - 4] == '.')) len1 -= 4;
+		if ((len2 > 4) && (de2.altname[len2 - 4] == '.')) len2 -= 4;
+
+		int len = (len1 < len2) ? len1 : len2;
+		int ret = strncasecmp(de1.altname, de2.altname, len);
+		if (!ret)
 		{
-			int len1 = strlen(de1.altname);
-			int len2 = strlen(de2.altname);
-			if ((len1 > 4) && (de1.altname[len1 - 4] == '.')) len1 -= 4;
-			if ((len2 > 4) && (de2.altname[len2 - 4] == '.')) len2 -= 4;
-
-			int len = (len1 < len2) ? len1 : len2;
-			int ret = strncasecmp(de1.altname, de2.altname, len);
+			ret = strcasecmp(de1.datecode, de2.datecode);
 			if (!ret)
 			{
 				return len1 < len2;
 			}
-
-			return ret < 0;
 		}
 
-		return strcasecmp(de1.altname, de2.altname) < 0;
+		return ret < 0;
 	}
 
 	size_t iterations = 0;
@@ -1117,6 +1127,93 @@ static bool IsInSameFolder(const char *folder, const char *path)
 		}
 	}
 	return false;
+}
+
+static int names_loaded = 0;
+static void get_display_name(direntext_t *dext, const char *ext, int options)
+{
+	static char *names = 0;
+	snprintf(dext->altname, sizeof(dext->altname), dext->de.d_name);
+	if (dext->de.d_type == DT_DIR) return;
+
+	int len = strlen(dext->altname);
+	int rbf = (len > 4 && !strcasecmp(dext->altname + len - 4, ".rbf"));
+	if (rbf)
+	{
+		dext->altname[len - 4] = 0;
+		char *p = strstr(dext->altname, "_20");
+		if (p) if (strlen(p + 3) < 6) p = 0;
+		if (p)
+		{
+			*p = 0;
+			strncpy(dext->datecode, p + 3, 15);
+			dext->datecode[15] = 0;
+		}
+		else
+		{
+			strcpy(dext->datecode, "------");
+		}
+
+		if (!names_loaded)
+		{
+			if (names)
+			{
+				free(names);
+				names = 0;
+			}
+
+			int size = FileLoad("names.txt", 0, 0);
+			if (size)
+			{
+				names = (char*)malloc(size + 1);
+				if (names)
+				{
+					names[0] = 0;
+					FileLoad("names.txt", names, 0);
+					names[size] = 0;
+				}
+			}
+			names_loaded = 1;
+		}
+
+		if (names)
+		{
+			strcat(dext->altname, ":");
+			len = strlen(dext->altname);
+			char *transl = strstr(names, dext->altname);
+			if (transl)
+			{
+				int copy = 0;
+				transl += len;
+				len = 0;
+				while (*transl && len < (int)sizeof(dext->altname) - 1)
+				{
+					if (!copy && *transl <= 32)
+					{
+						transl++;
+						continue;
+					}
+
+					if (copy && *transl < 32) break;
+
+					copy = 1;
+					dext->altname[len++] = *transl++;
+				}
+				len++;
+			}
+
+			dext->altname[len - 1] = 0;
+		}
+		return;
+	}
+
+	//do not remove ext if core supplies more than 1 extension and it's not list of cores
+	if (!(options & SCANO_CORES) && strlen(ext) > 3) return;
+	if (strchr(ext, '*') || strchr(ext, '?')) return;
+
+	/* find the extension on the end of the name*/
+	char *fext = strrchr(dext->altname, '.');
+	if (fext) *fext = 0;
 }
 
 int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix)
@@ -1280,7 +1377,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					if (!strncasecmp(de->d_name, ".", 1)) continue;
 				}
 
-				direntext_t dext = { *de, 0, "" };
+				direntext_t dext = { *de, 0, "", "" };
 				memcpy(dext.altname, de->d_name, sizeof(dext.altname));
 				if (!strcasecmp(dext.altname + strlen(dext.altname) - 4, ".zip")) dext.altname[strlen(dext.altname) - 4] = 0;
 
@@ -1382,8 +1479,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				}
 
 				{
-					direntext_t dext = { *de, 0, "" };
-					memcpy(dext.altname, de->d_name, sizeof(dext.altname));
+					direntext_t dext = { *de, 0, "", "" };
+					get_display_name(&dext, extension, options);
 					DirItem.push_back(dext);
 				}
 			}
@@ -1396,8 +1493,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			dirent up;
 			up.d_type = DT_DIR;
 			strcpy(up.d_name, "..");
-			direntext_t dext = { up, 0, "" };
-			memcpy(dext.altname, up.d_name, sizeof(dext.altname));
+			direntext_t dext = { up, 0, "", "" };
+			get_display_name(&dext, extension, options);
 			DirItem.push_back(dext);
 
 			mz_zip_reader_end(z);
@@ -1582,3 +1679,10 @@ direntext_t* flist_SelectedItem()
 {
 	return &DirItem[iSelectedEntry];
 }
+
+bool isMraName(char *path)
+{
+        char *spl = strrchr(path, '.');
+        return (spl && !strcmp(spl, ".mra"));
+}
+

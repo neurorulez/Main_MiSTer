@@ -28,6 +28,7 @@ struct direntext_t
 {
 	dirent de;
 	int  cookie;
+	char datecode[16];
 	char altname[256];
 };
 
@@ -110,6 +111,8 @@ const char *getRootDir();
 const char *getFullPath(const char *name);
 
 uint32_t getFileType(const char *name);
+bool isMraName(char *path);
+
 
 #define COEFF_DIR "filters"
 #define GAMMA_DIR "gamma"

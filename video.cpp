@@ -646,30 +646,44 @@ static uint32_t show_video_info(int force)
 		}
 
 		uint32_t scrh = v_cur.item[5];
-		if (height && scrh)
+		if (scrh)
 		{
-			if (cfg.vscale_border)
-			{
-				uint32_t border = cfg.vscale_border * 2;
-				if ((border + 100) > scrh) border = scrh - 100;
-				scrh -= border;
-			}
-
-			if (cfg.vscale_mode)
+			if (cfg.vscale_mode && height)
 			{
 				uint32_t div = 1 << (cfg.vscale_mode - 1);
 				uint32_t mag = (scrh*div) / height;
 				scrh = (height * mag) / div;
-			}
-
-			if(cfg.vscale_border || cfg.vscale_mode)
-			{
 				printf("Set vertical scaling to : %d\n", scrh);
+				spi_uio_cmd16(UIO_SETHEIGHT, scrh);
+			}
+			else if(cfg.vscale_border)
+			{
+				uint32_t border = cfg.vscale_border * 2;
+				if ((border + 100) > scrh) border = scrh - 100;
+				scrh -= border;
+				printf("Set max vertical resolution to : %d\n", scrh);
 				spi_uio_cmd16(UIO_SETHEIGHT, scrh);
 			}
 			else
 			{
 				spi_uio_cmd16(UIO_SETHEIGHT, 0);
+			}
+		}
+
+		uint32_t scrw = v_cur.item[1];
+		if (scrw)
+		{
+			if (cfg.vscale_border && !(cfg.vscale_mode && height))
+			{
+				uint32_t border = cfg.vscale_border * 2;
+				if ((border + 100) > scrw) border = scrw - 100;
+				scrw -= border;
+				printf("Set max horizontal resolution to : %d\n", scrw);
+				spi_uio_cmd16(UIO_SETWIDTH, scrw);
+			}
+			else
+			{
+				spi_uio_cmd16(UIO_SETWIDTH, 0);
 			}
 		}
 
@@ -735,6 +749,19 @@ void video_mode_adjust()
 			if (Fpix < 2.f || Fpix > 300.f)
 			{
 				printf("Estimated Fpix(%.4f MHz) is outside supported range. Canceling auto-adjust.\n", Fpix);
+				Fpix = 0;
+			}
+
+			uint32_t hz = 100000000 / vtime;
+			if (cfg.refresh_min && hz < cfg.refresh_min)
+			{
+				printf("Estimated frame rate (%d Hz) is less than MONITOR_HZ_MIN(%d Hz). Canceling auto-adjust.\n", hz, cfg.refresh_min);
+				Fpix = 0;
+			}
+
+			if (cfg.refresh_max && hz > cfg.refresh_max)
+			{
+				printf("Estimated frame rate (%d Hz) is more than MONITOR_HZ_MAX(%d Hz). Canceling auto-adjust.\n", hz, cfg.refresh_max);
 				Fpix = 0;
 			}
 		}
