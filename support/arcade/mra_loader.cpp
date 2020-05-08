@@ -15,7 +15,7 @@
 #include "../../lib/md5/md5.h"
 
 #include "buffer.h"
-#include "romutils.h"
+#include "mra_loader.h"
 
 #define kBigTextSize 1024
 struct arc_struct {
@@ -194,7 +194,7 @@ static int rom_data(const uint8_t *buf, int chunk, int map, struct MD5Context *m
 static int rom_file(const char *name, uint32_t crc32, int start, int len, int map, struct MD5Context *md5context)
 {
 	fileTYPE f = {};
-	static uint8_t buf[4096];
+	static uint8_t buf[8192];
 	if (!FileOpenZip(&f, name, crc32)) return 0;
 	if (start) FileSeek(&f, start, SEEK_SET);
 	unsigned long bytes2send = f.size - f.offset;

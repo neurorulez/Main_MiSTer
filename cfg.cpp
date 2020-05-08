@@ -66,6 +66,9 @@ static const ini_var_t ini_vars[] =
 	{ "CONTROLLER_INFO", (void*)(&(cfg.controller_info)), UINT8, 0, 10 },
 	{ "REFRESH_MIN", (void*)(&(cfg.refresh_min)), UINT8, 0, 150 },
 	{ "REFRESH_MAX", (void*)(&(cfg.refresh_max)), UINT8, 0, 150 },
+	{ "JAMMASD_VID", (void*)(&(cfg.jammasd_vid)), UINT16, 0, 0xFFFF },
+	{ "JAMMASD_PID", (void*)(&(cfg.jammasd_pid)), UINT16, 0, 0xFFFF },
+	{ "SNIPER_MODE", (void*)(&(cfg.sniper_mode)), UINT8, 0, 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));

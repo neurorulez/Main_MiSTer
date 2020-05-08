@@ -35,31 +35,7 @@
 #define CD_COMM_TRAY_CLOSE		0x0C
 #define CD_COMM_TRAY_OPEN		0x0D
 
-typedef struct
-{
-	fileTYPE f;
-	int offset;
-	int start;
-	int end;
-	int type;
-} track_t;
-
-typedef struct
-{
-	int end;
-	int last;
-	track_t tracks[100];
-//	fileTYPE sub;
-} toc_t;
-
-typedef struct
-{
-	uint8_t m;
-	uint8_t s;
-	uint8_t f;
-} msf_t;
-
-typedef int (*SendDataFunc) (uint8_t* buf, int len, uint8_t index);
+#include "../../cd.h"
 
 class cdd_t
 {
