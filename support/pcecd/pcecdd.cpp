@@ -380,29 +380,31 @@ void pcecdd_t::Update() {
 			return;
 		}
 
-		if (this->index >= this->toc.last)
-		{
-			this->state = PCECD_STATE_IDLE;
-			return;
-		}
-
-		if (this->toc.tracks[this->index].type)
-			return;
+		this->index = GetTrackByLBA(this->lba, &this->toc);
 
 		DISKLED_ON;
-		FileSeek(&this->toc.tracks[index].f, (this->lba * 2352) - this->toc.tracks[index].offset, SEEK_SET);
 
-		sec_buf[0] = 0x30;
-		sec_buf[1] = 0x09;
-		ReadCDDA(sec_buf + 2);
+		for (int i = 0; i <= this->CDDAFirst; i++)
+		{
+			if (this->toc.tracks[this->index].f.opened() && !this->toc.tracks[this->index].type)
+			{
+				FileSeek(&this->toc.tracks[index].f, (this->lba * 2352) - this->toc.tracks[index].offset, SEEK_SET);
 
-		if (SendData)
-			SendData(sec_buf, 2352 + 2, PCECD_DATA_IO_INDEX);
+				sec_buf[0] = 0x30;
+				sec_buf[1] = 0x09;
+				ReadCDDA(sec_buf + 2);
 
-		//printf("\x1b[32mPCECD: Audio sector send = %i, track = %i, offset = %i\n\x1b[0m", this->lba, this->index, (this->lba * 2352) - this->toc.tracks[index].offset);
+				if (SendData)
+					SendData(sec_buf, 2352 + 2, PCECD_DATA_IO_INDEX);
 
-		this->lba++;
-		if (this->lba > this->CDDAEnd)
+				//printf("\x1b[32mPCECD: Audio sector send = %i, track = %i, offset = %i\n\x1b[0m", this->lba, this->index, (this->lba * 2352) - this->toc.tracks[index].offset);
+			}
+			this->lba++;
+		}
+
+		this->CDDAFirst = 0;
+
+		if ((this->lba >= this->CDDAEnd) || this->toc.tracks[this->index].type || this->index >= this->toc.last)
 		{
 			if (this->CDDAMode == PCECD_CDDAMODE_LOOP) {
 				this->lba = this->CDDAStart;
@@ -414,6 +416,8 @@ void pcecdd_t::Update() {
 			if (this->CDDAMode == PCECD_CDDAMODE_INTERRUPT) {
 				PendStatus(PCECD_STATUS_GOOD, 0);
 			}
+
+			printf("\x1b[32mPCECD: playback reached the end %d\n\x1b[0m", this->lba);
 		}
 	}
 	else if (this->state == PCECD_STATE_PAUSE)
@@ -531,7 +535,20 @@ void pcecdd_t::CommandExec() {
 			new_lba = this->toc.tracks[index].start;
 		}*/
 
-		this->latency = (int)(get_cd_seek_ms(this->lba, new_lba)/13.33);
+		/* HuVideo streams by fetching 120 sectors at a time, taking advantage of the geometry
+		 * of the disc to reduce/eliminate seek time */
+		if ((this->lba == new_lba) && (cnt_ == 120))
+		{
+			this->latency = 0;
+		}
+		else if (comm[13] & 0x80) // fast seek (OSD setting)
+		{
+			this->latency = 0;
+		}
+		else
+		{
+			this->latency = (int)(get_cd_seek_ms(this->lba, new_lba)/13.33);
+		}
 		printf("seek time ticks: %d\n", this->latency);
 
 		this->lba = new_lba;
@@ -589,7 +606,15 @@ void pcecdd_t::CommandExec() {
 		break;
 		}
 
-		this->latency = (int)(get_cd_seek_ms(this->lba, new_lba) / 13.33);
+		if (comm[13] & 0x80) // fast seek (OSD setting)
+		{
+			this->latency = 0;
+		}
+		else
+		{
+			this->latency = (int)(get_cd_seek_ms(this->lba, new_lba) / 13.33);
+		}
+
 		printf("seek time ticks: %d\n", this->latency);
 
 		this->lba = new_lba;
@@ -602,8 +627,9 @@ void pcecdd_t::CommandExec() {
 		}*/
 
 		this->CDDAStart = new_lba;
-		this->CDDAEnd = this->toc.tracks[index].end;
+		this->CDDAEnd = this->toc.end;
 		this->CDDAMode = comm[1];
+		this->CDDAFirst = 1;
 
 		if (this->CDDAMode == PCECD_CDDAMODE_SILENT) {
 			this->state = PCECD_STATE_PAUSE;
@@ -611,17 +637,6 @@ void pcecdd_t::CommandExec() {
 		else {
 			this->state = PCECD_STATE_PLAY;
 		}
-
-		FileSeek(&this->toc.tracks[index].f, (this->lba * 2352) - this->toc.tracks[index].offset, SEEK_SET);
-
-		sec_buf[0] = 0x30;
-		sec_buf[1] = 0x09;
-		ReadCDDA(sec_buf + 2);
-
-		if (SendData)
-			SendData(sec_buf, 2352 + 2, PCECD_DATA_IO_INDEX);
-
-		this->lba++;
 
 		PendStatus(PCECD_STATUS_GOOD, 0);
 	}
@@ -653,7 +668,10 @@ void pcecdd_t::CommandExec() {
 		this->CDDAMode = comm[1];
 		this->CDDAEnd = new_lba;
 
-		if (this->CDDAMode != PCECD_CDDAMODE_SILENT) {
+		if (this->CDDAMode == PCECD_CDDAMODE_SILENT) {
+			this->state = PCECD_STATE_IDLE;
+		}
+		else {
 			this->state = PCECD_STATE_PLAY;
 		}
 
@@ -677,7 +695,7 @@ void pcecdd_t::CommandExec() {
 
 		buf[0] = 0x0A;
 		buf[1] = 0 | 0x80;
-		buf[2] = this->state == PCECD_STATE_PAUSE ? 2 : (PCECD_STATE_PLAY ? 0 : 3);
+		buf[2] = this->state == PCECD_STATE_PAUSE ? 2 : (this->state == PCECD_STATE_PLAY ? 0 : 3);
 		buf[3] = 0;
 		buf[4] = BCD(this->index + 1);
 		buf[5] = BCD(this->index);
@@ -716,7 +734,7 @@ int pcecdd_t::GetStatus(uint8_t* buf) {
 }
 
 int pcecdd_t::SetCommand(uint8_t* buf) {
-	memcpy(comm, buf, 12);
+	memcpy(comm, buf, 14);
 	return 0;
 }
 
