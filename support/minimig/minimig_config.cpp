@@ -11,10 +11,12 @@
 #include "../../menu.h"
 #include "../../user_io.h"
 #include "../../input.h"
+#include "../../cfg.h"
 #include "minimig_boot.h"
 #include "minimig_fdd.h"
 #include "minimig_hdd.h"
 #include "minimig_config.h"
+#include "minimig_share.h"
 
 const char *config_memory_chip_msg[] = { "512K", "1M",   "1.5M", "2M" };
 const char *config_memory_slow_msg[] = { "none", "512K", "1M",   "1.5M" };
@@ -376,6 +378,7 @@ static void ApplyConfiguration(char reloadkickstart)
 	minimig_ConfigVideo(minimig_config.scanlines);
 	minimig_ConfigAudio(minimig_config.audio);
 	minimig_ConfigAutofire(minimig_config.autofire, 0xC);
+	minimig_set_extcfg(minimig_get_extcfg() & ~1);
 }
 
 int minimig_cfg_load(int num)
@@ -502,6 +505,7 @@ void minimig_reset()
 {
 	ApplyConfiguration(0);
 	user_io_rtc_reset();
+	minimig_share_reset();
 }
 
 void minimig_set_kickstart(char *name)
@@ -525,7 +529,31 @@ typedef struct
 
 vmode_adjust_t vmodes_adj[64] = {};
 
-static void adjust_vsize(char force)
+static const char* get_shared_vadjust_path()
+{
+	static char path[1024] = {};
+	if (!strlen(path))
+	{
+		if (strlen(cfg.shared_folder))
+		{
+			if (cfg.shared_folder[0] == '/')
+			{
+				snprintf(path, sizeof(path), "%s/minimig_vadjust.dat", cfg.shared_folder);
+			}
+			else
+			{
+				snprintf(path, sizeof(path), "%s/%s/minimig_vadjust.dat", HomeDir(), cfg.shared_folder);
+			}
+		}
+		else
+		{
+			snprintf(path, sizeof(path), "%s/shared/minimig_vadjust.dat", HomeDir());
+		}
+	}
+	return path;
+}
+
+void minimig_adjust_vsize(char force)
 {
 	static uint16_t nres = 0;
 	spi_uio_cmd_cont(UIO_GET_VMODE);
@@ -540,7 +568,11 @@ static void adjust_vsize(char force)
 		printf("\033[1;37mVMODE: resolution: %u x %u, mode: %u\033[0m\n", scr_hsize, scr_vsize, res & 255);
 
 		static int loaded = 0;
-		if (~loaded)
+		if (!loaded && FileExists(get_shared_vadjust_path(), 0))
+		{
+			FileLoad(get_shared_vadjust_path(), vmodes_adj, sizeof(vmodes_adj));
+		}
+		else if (!loaded)
 		{
 			FileLoadConfig("minimig_vadjust.dat", vmodes_adj, sizeof(vmodes_adj));
 			loaded = 1;
@@ -629,7 +661,7 @@ void minimig_set_adjust(char n)
 {
 	if (minimig_adjust && !n) store_vsize();
 	minimig_adjust = (n == 1) ? 1 : 0;
-	if (n == 2) adjust_vsize(1);
+	if (n == 2) minimig_adjust_vsize(1);
 }
 
 char minimig_get_adjust()
@@ -672,4 +704,20 @@ void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask)
 	uint16_t param = mask;
 	param = (param << 8) | autofire;
 	spi_uio_cmd16(UIO_MM2_JOY, param);
+}
+
+void minimig_set_extcfg(unsigned int ext_cfg)
+{
+	minimig_config.ext_cfg = (unsigned short)ext_cfg;
+	minimig_config.ext_cfg2 = (unsigned short)(ext_cfg >> 16);
+
+	spi_uio_cmd_cont(UIO_SET_STATUS2);
+	spi32_w(0);
+	spi32_w(ext_cfg);
+	DisableIO();
+}
+
+unsigned int minimig_get_extcfg()
+{
+	return (minimig_config.ext_cfg2 << 16) | minimig_config.ext_cfg;
 }
