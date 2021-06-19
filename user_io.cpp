@@ -39,16 +39,12 @@
 static char core_path[1024] = {};
 static char rbf_path[1024] = {};
 
-uint64_t joyraw_count = 0;
-uint64_t last_joyraw = 0x0;
-uint8_t joyraw_button1 =0;
-uint8_t joyraw_button2 =0;
-uint8_t joyraw_up = 0;
-uint8_t joyraw_down = 0;
-uint8_t joyraw_left = 0;
-uint8_t joyraw_right = 0;  
-
-
+static fileTYPE sd_image[16] = {};
+static int      sd_image_cangrow[16] = {};
+static uint64_t buffer_lba[16] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
+								   ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
+								   ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
+								   ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
 
 static int use_save = 0;
 
@@ -1873,6 +1869,15 @@ int user_io_use_cheats()
 {
 	return use_cheats;
 }
+
+uint64_t joyraw_count = 0;
+uint64_t last_joyraw = 0x0;
+uint8_t joyraw_button1 =0;
+uint8_t joyraw_button2 =0;
+uint8_t joyraw_up = 0;
+uint8_t joyraw_down = 0;
+uint8_t joyraw_left = 0;
+uint8_t joyraw_right = 0;  
 
 uint16_t user_io_joyraw_check_change()
 {
