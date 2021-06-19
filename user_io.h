@@ -21,6 +21,8 @@
 
 // 0x08 - 0x0F - core specific
 
+#define UIO_USERIO_GET  0x0f
+
 #define UIO_JOYSTICK2   0x10  // also used by minimig and 8 bit
 #define UIO_JOYSTICK3   0x11  // -"-
 #define UIO_JOYSTICK4   0x12  // -"-
