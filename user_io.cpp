@@ -2556,6 +2556,7 @@ void user_io_poll()
 	}
 
 	user_io_send_buttons(0);
+	user_io_joyraw_check_change();
 
 	if (is_minimig())
 	{
